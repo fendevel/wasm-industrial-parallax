@@ -19,3 +19,7 @@ all: ./script/game.js ./objs/main.o ./objs/walloc.o ./script/main.wasm ./objs/ma
 .PHONY: copy
 copy:
 	cp -t $(INSTALLDIR) -r audio image script
+
+.PHONY: clean
+clean:
+	rm -rf script objs
