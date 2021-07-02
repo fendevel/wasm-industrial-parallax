@@ -1,3 +1,7 @@
+compile_commands.json
+
+objs
+
 # ---> C
 # Prerequisites
 *.d
