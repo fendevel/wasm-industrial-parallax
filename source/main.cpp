@@ -444,7 +444,7 @@ static bool music_playing = false;
         screen_buffer_len = len;
     }
 
-    audio_set_volume(audio_track, .25f);
+    audio_set_volume(audio_track, .125f);
 
     return 1;
 }
