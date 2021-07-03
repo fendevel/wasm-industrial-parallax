@@ -102,55 +102,6 @@ static u32 blend(u32 src0, u32 src1)
     return rgba(nRed, nGreen, nBlue, 0xff);
 }
 
-static v128_t blend_simd(v128_t src0, v128_t src1)
-{
-    v128_t const src_r128 = wasm_v128_and(wasm_i32x4_shr(src0,  0), wasm_i32x4_splat(0xff));
-    v128_t const src_g128 = wasm_v128_and(wasm_i32x4_shr(src0,  8), wasm_i32x4_splat(0xff));
-    v128_t const src_b128 = wasm_v128_and(wasm_i32x4_shr(src0, 16), wasm_i32x4_splat(0xff));
-    
-    v128_t const src_a128 = wasm_v128_and(wasm_i32x4_shr(src0, 24), wasm_i32x4_splat(0xff));
-
-    v128_t const dst_r128 = wasm_v128_and(wasm_i32x4_shr(src1,  0), wasm_i32x4_splat(0xff));
-    v128_t const dst_g128 = wasm_v128_and(wasm_i32x4_shr(src1,  8), wasm_i32x4_splat(0xff));
-    v128_t const dst_b128 = wasm_v128_and(wasm_i32x4_shr(src1, 16), wasm_i32x4_splat(0xff));
-
-    v128_t const inv_a128 = wasm_i32x4_sub(wasm_i32x4_splat(255), src_a128);
-
-    v128_t const nr128 = wasm_i32x4_shr(wasm_i32x4_add(wasm_i32x4_mul(src_r128, src_a128), wasm_i32x4_mul(dst_r128, inv_a128)), 8);
-    v128_t const ng128 = wasm_i32x4_shr(wasm_i32x4_add(wasm_i32x4_mul(src_g128, src_a128), wasm_i32x4_mul(dst_g128, inv_a128)), 8);
-    v128_t const nb128 = wasm_i32x4_shr(wasm_i32x4_add(wasm_i32x4_mul(src_b128, src_a128), wasm_i32x4_mul(dst_b128, inv_a128)), 8);
-
-    v128_t const res_r128 = wasm_i32x4_shl(nr128,  0);
-    v128_t const res_g128 = wasm_i32x4_shl(ng128,  8);
-    v128_t const res_b128 = wasm_i32x4_shl(nb128, 16);
-    v128_t const res_a128 = wasm_i32x4_splat(0xff << 24);
-
-    return wasm_v128_or(res_r128, wasm_v128_or(res_g128, wasm_v128_or(res_b128, res_a128)));
-}
-
-static constexpr v128_t wasm_u32x4_const(uint32_t __c0, uint32_t __c1, uint32_t __c2, uint32_t __c3)
-{
-    return (v128_t)(__u32x4){__c0, __c1, __c2, __c3};
-}
-
-static v128_t wasm_u32x4_make(uint32_t __c0, uint32_t __c1, uint32_t __c2, uint32_t __c3) {
-    return (v128_t)(__u32x4){__c0, __c1, __c2, __c3};
-}
-
-static v128_t  wasm_u8x16_splat(uint8_t __a) {
-  return (v128_t)(__u8x16){__a, __a, __a, __a, __a, __a, __a, __a,
-                           __a, __a, __a, __a, __a, __a, __a, __a};
-}
-
-static v128_t wasm_u8x16_make(uint8_t __c0, uint8_t __c1, uint8_t __c2, uint8_t __c3, uint8_t __c4,
-                uint8_t __c5, uint8_t __c6, uint8_t __c7, uint8_t __c8, uint8_t __c9,
-                uint8_t __c10, uint8_t __c11, uint8_t __c12, uint8_t __c13,
-                uint8_t __c14, uint8_t __c15) {
-  return (v128_t)(__u8x16){__c0,  __c1,  __c2,  __c3, __c4,  __c5,
-                           __c6,  __c7,  __c8,  __c9, __c10, __c11,
-                           __c12, __c13, __c14, __c15};
-}
-
 static void draw_sprite(u32 dstw, u32 dsth, u32 *dst, image const &src, vec2i offset, i32 upscale)
 {
     for (i32 j = 0; j < src.h*upscale; ++j)
@@ -271,11 +222,11 @@ static bool music_playing = false;
 
     clear_screen(rgba(25, 40, 31, 255));
     
-    static i32 s{};
+    static i32 scroll{};
 
     for (i32 i = 0; i < length_of(parallax_industrial); ++i)
     {
-        i32 const amount = ((s/2)*i);
+        i32 const amount = ((scroll/2)*i);
         auto const &parallax = parallax_industrial[i];
 
         for (i32 j = 0; j < 3; ++j)
@@ -293,21 +244,7 @@ static bool music_playing = false;
         draw_sprite(screen_size.x, screen_size.y, screen_buffer, music_off_icon.image, {screen_size.x - music_off_icon.image.w, 0}, 1);
     }
 
-    s += 1;
-
-    vec2f const vertices[]{
-        {f32(mouse.x), f32(mouse.y)}, {0, f32(screen_size.y)}, {f32(screen_size.x), f32(screen_size.y)}
-    };
-
-    if (keystate_ptr[keycode_Q])
-    {
-        audio_play(audio_track, true);
-    }
-
-    if (keystate_ptr[keycode_E])
-    {
-        audio_pause(audio_track);
-    }
+    scroll += 1;
 
     memcpy(buttonstate_old, buttonstate_ptr, buttonstate_len);
 
