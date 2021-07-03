@@ -1,4 +1,10 @@
-all: ./script/game.js ./objs/main.o ./objs/walloc.o ./script/main.wasm ./objs/main.wat 
+all: objs script ./script/game.js ./objs/main.o ./objs/walloc.o ./script/main.wasm ./objs/main.wat 
+
+objs:
+	mkdir -p $@
+
+script:
+	mkdir -p $@
 
 ./objs/main.o: ./source/main.cpp
 #	clang -Xclang -target-abi -Xclang experimental-mv -g3 -O3 -std=c++20 --target=wasm32-unknown-unknown -fPIC -Wl,--shared -Wl,--allow-undefined -Wl,--no-entry -nostdlib -msimd128 -mbulk-memory -mmultivalue $< -o ./objs/$@
@@ -14,7 +20,7 @@ all: ./script/game.js ./objs/main.o ./objs/walloc.o ./script/main.wasm ./objs/ma
 	wasm2wat --enable-all $< > $@
 
 ./script/game.js: ./source/game.ts
-	tsc --outDir ./script/
+	npx tsc --outDir ./script/
 
 .PHONY: copy
 copy:
