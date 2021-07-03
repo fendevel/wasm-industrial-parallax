@@ -3,11 +3,6 @@
 #include "math.hpp"
 #include "imports.hpp"
 
-static constexpr u32 align(u32 val, u32 alignment)
-{
-    return ((val + (alignment - 1)) & ~(alignment - 1));
-}
-
 extern "C" {
     void* malloc(size_t size);
     void free(void *ptr);
@@ -41,29 +36,17 @@ struct rgba8_type
     u32 r, g, b, a;
 };
 
-static constexpr rgba8_type unpack_rgba8(u32 abgr)
+static constexpr rgba8_type unpack_rgba8(u32 col)
 {
     return {
-        ((abgr >>  0) & 255),
-        ((abgr >>  8) & 255),
-        ((abgr >> 16) & 255),
-        ((abgr >> 24) & 255)
+        ((col >>  0) & 255),
+        ((col >>  8) & 255),
+        ((col >> 16) & 255),
+        ((col >> 24) & 255)
     };
 }
 
-static f32 to_rotation(vec2f v)
-{
-    float const res = math::acos(v.x / v.len());
-    if (v.y > 0.f)
-    {
-        return math::tau - res;
-    }
-
-    return res;
-}
-
-static i32 screen_width;
-static i32 screen_height;
+static vec2i screen_size;
 static u32 screen_buffer_len;
 static u32* screen_buffer;
 
@@ -168,79 +151,6 @@ static v128_t wasm_u8x16_make(uint8_t __c0, uint8_t __c1, uint8_t __c2, uint8_t 
                            __c12, __c13, __c14, __c15};
 }
 
-static v128_t
-wasm_u16x8_extend_low_u8x16(v128_t __a) {
-  return (v128_t) __builtin_convertvector(
-      (__u8x8){((__u8x16)__a)[0], ((__u8x16)__a)[1], ((__u8x16)__a)[2],
-               ((__u8x16)__a)[3], ((__u8x16)__a)[4], ((__u8x16)__a)[5],
-               ((__u8x16)__a)[6], ((__u8x16)__a)[7]},
-      __u16x8);
-}
-
-static v128_t wasm_u32x4_extend_low_u16x8(v128_t __a) {
-  return (v128_t) __builtin_convertvector(
-      (__u16x4){((__u16x8)__a)[0], ((__u16x8)__a)[1], ((__u16x8)__a)[2],
-                ((__u16x8)__a)[3]},
-      __u32x4);
-}
-
-static void draw_line(u32 dstw, u32 dsth, u32 dst_len, u32 *dst, i32 x0, i32 y0, i32 x1, i32 y1, u32 rgba)
-{
-    x1 -= x0;
-    y1 -= y0;
-    i32 g = 0;
-
-    if (math::abs(x1) >= math::abs(y1)) 
-    {
-        g = math::abs(x1);
-        if (0 != g) 
-        {
-            y1 = 65536 * y1 / g;
-        }
-        x1 = 0 <= x1 ? 65536 : -65536;
-    } 
-    else 
-    {
-        g = math::abs(y1);
-        if (0 != g)
-        {
-            x1 = 65536 * x1 / g;
-        }
-        y1 = 0 <= y1 ? 65536 : -65536;
-    }
-    
-    x0 = 65536 * x0 + 32768;
-    y0 = 65536 * y0 + 32768;
-
-    while (0 <= g)
-    {
-        i32 const x = (x0 >> 16);
-        i32 const y = (y0 >> 16);
-
-        if ((x >= 0 && x < dstw) &&
-            (y >= 0 && y < dsth))
-        {
-            i32 pixel_pos = y * dstw + x;
-            dst[pixel_pos] = blend(rgba, dst[pixel_pos]);
-        }
-
-        g -= 1;
-        x0 += x1;
-        y0 += y1;
-    }
-}
-
-static void draw_rect(u32 dstw, u32 dsth, u32 dst_len, u32 *dst, i32 x, i32 y, i32 w, i32 h, u32 rgba)
-{
-    w -= 1;
-    h -= 1;
-
-    draw_line(screen_width, screen_height, screen_buffer_len, screen_buffer, x, y, x + w, y, rgba);
-    draw_line(screen_width, screen_height, screen_buffer_len, screen_buffer, x, y + h, x + w, y + h, rgba);
-    draw_line(screen_width, screen_height, screen_buffer_len, screen_buffer, x, y, x, y + h, rgba);
-    draw_line(screen_width, screen_height, screen_buffer_len, screen_buffer, x + w, y, x + w, y + h, rgba);
-}
-
 static void draw_sprite(u32 dstw, u32 dsth, u32 *dst, image const &src, vec2i offset, i32 upscale)
 {
     for (i32 j = 0; j < src.h*upscale; ++j)
@@ -296,14 +206,9 @@ static bool image_loaded(image_load &img)
     return true;
 }
 
-static image_load music_off_icon {.id{-1}};
-static image_load music_on_icon {.id{-1}};
-static image_load parallax_industrial[4]{
-    {.id{-1}},
-    {.id{-1}},
-    {.id{-1}},
-    {.id{-1}}
-};
+static image_load music_off_icon;
+static image_load music_on_icon;
+static image_load parallax_industrial[4];
 
 static i32 audio_track = -1;
 
@@ -318,11 +223,11 @@ static u32 buttonstate_len;
 static void clear_screen(u32 col)
 {
     v128_t const col128 = wasm_i32x4_splat(col);
-    for (i32 j = 0; j < screen_height; ++j)
+    for (i32 j = 0; j < screen_size.y; ++j)
     {
-        for (i32 i = 0; i < screen_width; i += 8)
+        for (i32 i = 0; i < screen_size.x; i += 8)
         {
-            i32 const dst_offset = j * screen_width + i;
+            i32 const dst_offset = j * screen_size.x + i;
             wasm_v128_store(screen_buffer + dst_offset+0, col128);
             wasm_v128_store(screen_buffer + dst_offset+4, col128);
         }
@@ -375,23 +280,23 @@ static bool music_playing = false;
 
         for (i32 j = 0; j < 3; ++j)
         {
-            draw_sprite(screen_width, screen_height, screen_buffer, parallax.image, {screen_width - ((amount + parallax.image.w*3*j)%(screen_width + parallax.image.w*3)), screen_height - parallax.image.h*3}, 3);
+            draw_sprite(screen_size.x, screen_size.y, screen_buffer, parallax.image, {screen_size.x - ((amount + parallax.image.w*3*j)%(screen_size.x + parallax.image.w*3)), screen_size.y - parallax.image.h*3}, 3);
         }
     }
 
     if (music_playing)
     {
-        draw_sprite(screen_width, screen_height, screen_buffer, music_on_icon.image, {screen_width - music_on_icon.image.w, 0}, 1);
+        draw_sprite(screen_size.x, screen_size.y, screen_buffer, music_on_icon.image, {screen_size.x - music_on_icon.image.w, 0}, 1);
     }
     else
     {
-        draw_sprite(screen_width, screen_height, screen_buffer, music_off_icon.image, {screen_width - music_off_icon.image.w, 0}, 1);
+        draw_sprite(screen_size.x, screen_size.y, screen_buffer, music_off_icon.image, {screen_size.x - music_off_icon.image.w, 0}, 1);
     }
 
     s += 1;
 
     vec2f const vertices[]{
-        {f32(mouse.x), f32(mouse.y)}, {0, f32(screen_height)}, {f32(screen_width), f32(screen_height)}
+        {f32(mouse.x), f32(mouse.y)}, {0, f32(screen_size.y)}, {f32(screen_size.x), f32(screen_size.y)}
     };
 
     if (keystate_ptr[keycode_Q])
@@ -409,10 +314,9 @@ static bool music_playing = false;
     return 0;
 }
 
-[[clang::export_name("main")]] i32 entry(i32 w, i32 h)
+[[clang::export_name("entry")]] i32 entry(i32 w, i32 h)
 {
-    screen_width = w;
-    screen_height = h;
+    screen_size = {w, h};
 
     music_off_icon.id = request_image("./image/outline_volume_off_white_24dp.png");
     music_on_icon.id = request_image("./image/outline_volume_up_white_24dp.png");

@@ -12,19 +12,19 @@ using i32 = int;
 using f32 = float;
 using f64 = double;
 
-static void memset(void *dst, i32 val, u64 size)
+static void* memset(void *dst, i32 val, u64 size)
 {
 #if __has_builtin(__builtin_memset)
-    __builtin_memset(dst, val, size);
+    return __builtin_memset(dst, val, size);
 #else
 #error "__builtin_memset not supported!"
 #endif
 }
 
-static void memcpy(void *dst, void const *src, u64 size)
+static void* memcpy(void *dst, void const *src, u64 size)
 {
 #if __has_builtin(__builtin_memcpy)
-    __builtin_memcpy(dst, src, size);
+    return __builtin_memcpy(dst, src, size);
 #else
 #error "__builtin_memcpy not supported!"
 #endif

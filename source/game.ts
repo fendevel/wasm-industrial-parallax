@@ -1,6 +1,4 @@
 
-let w: number = 0;
-let h: number = 0;
 let context: CanvasRenderingContext2D;
 let module_instance: WebAssembly.Instance;
 let memory: WebAssembly.Memory = new WebAssembly.Memory({initial: 1000, maximum: 1000})
@@ -22,7 +20,6 @@ let screenLen: number = 0;
 let mouseInside: boolean = false;
 
 const audioContext: AudioContext = new AudioContext();
-
 
 function getKeystateBuffer()
 {
@@ -48,7 +45,7 @@ async function update(timestamp: DOMHighResTimeStamp)
     let on_frame: WebAssembly.ExportValue = module_instance.exports["on_frame"];
     (on_frame as any)();
     
-    let src = new ImageData(new Uint8ClampedArray(memoryView.buffer).subarray(screenPtr, screenPtr + screenLen), w);
+    let src = new ImageData(new Uint8ClampedArray(memoryView.buffer).subarray(screenPtr, screenPtr + screenLen), context.canvas.width);
     let image = await createImageBitmap(src);
     context.drawImage(image, 0, 0, image.width, image.height);
     const end = Date.now();
@@ -302,9 +299,6 @@ async function main()
     {
         console.log("context is good!");
 
-        w = canvas.width;
-        h = canvas.height;
-
         canvas.addEventListener("mouseenter", (event: MouseEvent)=>{
             mouseInside = true;
         });
@@ -411,15 +405,15 @@ async function main()
         }
 
         {
-            const len = w*h*4;
+            const len = canvas.width*canvas.height*4;
             const ptr = zalloc(len);
 
             screenPtr = ptr;
             screenLen = len;
         }
 
-        let export_main: WebAssembly.ExportValue = module_instance.exports["main"];
-        (export_main as any)(w, h);
+        let export_main: WebAssembly.ExportValue = module_instance.exports["entry"];
+        (export_main as any)(canvas.width, canvas.height);
 
         window.requestAnimationFrame(update)
     }
